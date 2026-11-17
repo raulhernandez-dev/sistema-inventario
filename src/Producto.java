@@ -37,7 +37,7 @@ public class Producto {
         System.out.println("Producto registrado y disponible");
         System.out.println("Codigo:     " + codigo);
         System.out.println("Nombre:     " + nombre);
-        System.out.println("Precio:     $" + String.format("%.2f", precio * 1.16));
+        System.out.println("Precio:     $" + String.format("%.2f", precio));
         System.out.println("Existencia: " + existencia + " unidades");
     }
 
