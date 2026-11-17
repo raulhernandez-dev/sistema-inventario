@@ -1,0 +1,98 @@
+# Workflow de despliegue del Sistema de Inventario (Java 21)
+# Usa el paquete publicado en GitHub Releases; no vuelve a construir el sistema.
+name: Despliegue del Sistema de Inventario
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version liberada a desplegar'
+        required: true
+        default: 'v1.0.2'
+      version_anterior:
+        description: 'Version estable para recuperar si el despliegue falla'
+        required: true
+        default: 'v1.0.2'
+
+permissions:
+  contents: read
+
+env:
+  VERSION: ${{ inputs.version }}
+  ANTERIOR: ${{ inputs.version_anterior }}
+  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+  DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+
+jobs:
+  deploy:
+    name: Desplegar version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio (llave publica del servidor)
+        uses: actions/checkout@v7
+
+      # Entorno de destino: servidor Linux con Java 21 y acceso SSH (contenedor)
+      - name: Preparar servidor de destino
+        run: |
+          docker run -d --name servidor-inventario --hostname servidor-inventario \
+            -p "${DEPLOY_PORT}:22" eclipse-temurin:21-jre sleep infinity
+          docker exec servidor-inventario bash -c "apt-get update -qq && apt-get install -y -qq openssh-server unzip > /dev/null"
+          docker exec servidor-inventario bash -c "useradd -m -s /bin/bash ${DEPLOY_USER} && mkdir -p /run/sshd /home/${DEPLOY_USER}/.ssh"
+          docker cp deploy/servidor_deploy.pub servidor-inventario:/home/${DEPLOY_USER}/.ssh/authorized_keys
+          docker exec servidor-inventario bash -c "chown -R ${DEPLOY_USER}: /home/${DEPLOY_USER}/.ssh && chmod 700 /home/${DEPLOY_USER}/.ssh && chmod 600 /home/${DEPLOY_USER}/.ssh/authorized_keys && /usr/sbin/sshd"
+          docker exec servidor-inventario bash -c "cat /etc/os-release | head -1; java -version 2>&1 | head -1"
+
+      - name: Configurar conexion SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          for i in 1 2 3 4 5; do ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null && break; sleep 2; done
+          echo "SSH=ssh -i $HOME/.ssh/deploy_key -p $DEPLOY_PORT $DEPLOY_USER@$DEPLOY_HOST" >> "$GITHUB_ENV"
+          echo "SCP=scp -i $HOME/.ssh/deploy_key -P $DEPLOY_PORT" >> "$GITHUB_ENV"
+
+      - name: Crear directorio en el servidor
+        run: |
+          $SSH 'hostname; mkdir -p ~/sistema-inventario && echo "Directorio listo: ~/sistema-inventario"'
+
+      - name: Descargar version liberada
+        uses: robinraju/release-downloader@v1
+        with:
+          repository: ${{ github.repository }}
+          tag: ${{ inputs.version }}
+          fileName: sistema-inventario-${{ inputs.version }}.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Transferir paquete al servidor
+        run: |
+          $SCP "sistema-inventario-${VERSION}.zip" "$DEPLOY_USER@$DEPLOY_HOST:~/sistema-inventario/"
+          $SSH "ls -l ~/sistema-inventario/sistema-inventario-${VERSION}.zip"
+
+      - name: Preparar version en el servidor
+        run: |
+          $SSH "cd ~/sistema-inventario && mkdir -p version-${VERSION} \
+            && unzip -o -q sistema-inventario-${VERSION}.zip -d version-${VERSION} \
+            && ln -sfn version-${VERSION} actual && ls -R version-${VERSION} && ls -l actual"
+
+      - name: Ejecutar y verificar el sistema
+        run: |
+          $SSH 'cd ~/sistema-inventario/actual \
+            && echo "== Mostrar producto ==" && java -jar sistema-inventario.jar \
+            && echo "== Registrar y consultar productos ==" && java -cp sistema-inventario.jar BuscadorProductos'
+
+      - name: Recuperar version anterior
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "El despliegue de ${VERSION} fallo. Recuperando ${ANTERIOR}..."
+          gh release download "$ANTERIOR" --repo "${{ github.repository }}" --pattern "sistema-inventario-${ANTERIOR}.zip" --clobber
+          $SCP "sistema-inventario-${ANTERIOR}.zip" "$DEPLOY_USER@$DEPLOY_HOST:~/sistema-inventario/"
+          $SSH "cd ~/sistema-inventario && mkdir -p version-${ANTERIOR} \
+            && unzip -o -q sistema-inventario-${ANTERIOR}.zip -d version-${ANTERIOR} \
+            && ln -sfn version-${ANTERIOR} actual && ls -l actual \
+            && cd actual && java -jar sistema-inventario.jar && java -cp sistema-inventario.jar BuscadorProductos"
