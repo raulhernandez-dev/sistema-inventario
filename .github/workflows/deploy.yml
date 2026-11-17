@@ -39,6 +39,8 @@ jobs:
           docker run -d --name servidor-inventario --hostname servidor-inventario \
             -p "${DEPLOY_PORT}:22" eclipse-temurin:21-jre sleep infinity
           docker exec servidor-inventario bash -c "apt-get update -qq && apt-get install -y -qq openssh-server unzip > /dev/null"
+          # Java debe estar en el PATH de las sesiones SSH (no solo en el del contenedor)
+          docker exec servidor-inventario ln -sf /opt/java/openjdk/bin/java /usr/local/bin/java
           docker exec servidor-inventario bash -c "useradd -m -s /bin/bash ${DEPLOY_USER} && mkdir -p /run/sshd /home/${DEPLOY_USER}/.ssh"
           docker cp deploy/servidor_deploy.pub servidor-inventario:/home/${DEPLOY_USER}/.ssh/authorized_keys
           docker exec servidor-inventario bash -c "chown -R ${DEPLOY_USER}: /home/${DEPLOY_USER}/.ssh && chmod 700 /home/${DEPLOY_USER}/.ssh && chmod 600 /home/${DEPLOY_USER}/.ssh/authorized_keys && /usr/sbin/sshd"
