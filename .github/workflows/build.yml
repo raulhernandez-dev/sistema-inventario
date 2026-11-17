@@ -1,0 +1,41 @@
+# Workflow de integracion continua del Sistema de Inventario (Java)
+name: Build - Sistema de Inventario
+
+# Eventos que activan el workflow
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Compilar y probar el proyecto Java
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Descargar el codigo del repositorio en la maquina virtual
+      - name: Descargar el codigo
+        uses: actions/checkout@v7
+
+      # 2. Preparar el entorno: instalar el JDK (javac y java)
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # 3. Construir: compilar todas las clases de src/
+      - name: Compilar el codigo fuente
+        run: |
+          mkdir -p build
+          javac -encoding UTF-8 -Xlint:all -d build src/*.java
+          ls build
+
+      # 4. Verificar: ejecutar los programas para confirmar que funcionan
+      - name: Ejecutar Producto
+        run: java -cp build Producto
+
+      - name: Ejecutar BuscadorProductos
+        run: java -cp build BuscadorProductos
