@@ -1,0 +1,69 @@
+# Workflow de liberacion del Sistema de Inventario (Java + JUnit 4)
+name: Liberacion del Sistema de Inventario
+
+on:
+  # Se ejecuta al enviar una etiqueta de version (git push origin v1.0.0)
+  push:
+    tags:
+      - 'v*'
+  # Ejecucion manual desde Actions: crea la etiqueta indicada y libera la version
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version a liberar (por ejemplo v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+
+jobs:
+  liberar:
+    name: Liberar version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v7
+
+      - name: Crear etiqueta de la version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version invalida: $VERSION"; exit 1; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Version $VERSION del Sistema de Inventario"
+          git push origin "$VERSION"
+
+      - name: Preparar Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Ejecutar pruebas
+        run: |
+          mkdir -p lib
+          curl -sSfL -o lib/junit-4.13.2.jar https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar
+          curl -sSfL -o lib/hamcrest-core-1.3.jar https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar
+          javac -encoding UTF-8 -cp lib/junit-4.13.2.jar -d out-test src/*.java tests/*.java
+          java -cp "out-test:lib/junit-4.13.2.jar:lib/hamcrest-core-1.3.jar" EjecutarPruebas
+
+      - name: Crear paquete
+        run: |
+          javac -encoding UTF-8 -d build src/*.java
+          mkdir -p paquete
+          jar --create --file paquete/sistema-inventario.jar --main-class Producto -C build .
+          cp -r src paquete/
+          cd paquete && zip -r ../sistema-inventario-${VERSION}.zip src sistema-inventario.jar
+          cd .. && unzip -l sistema-inventario-${VERSION}.zip
+
+      - name: Publicar version
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION }} - Sistema de Inventario
+          files: sistema-inventario-${{ env.VERSION }}.zip
+          generate_release_notes: true
