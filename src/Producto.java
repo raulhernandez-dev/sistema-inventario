@@ -34,7 +34,7 @@ public class Producto {
 
     /** Muestra la informacion del producto en pantalla. */
     public void mostrarInformacion() {
-        System.out.println("Producto registrado");
+        System.out.println("Producto registrado y disponible");
         System.out.println("Codigo:     " + codigo);
         System.out.println("Nombre:     " + nombre);
         System.out.println("Precio:     $" + String.format("%.2f", precio));
