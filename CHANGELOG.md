@@ -2,6 +2,11 @@
 
 Todas las versiones liberadas del Sistema de Inventario.
 
+## v1.1.0 - 2026-11-17
+
+- Registro del catalogo de productos desde `datos/productos.csv` en `BuscadorProductos`.
+- Pruebas CP01 - CP07 satisfactorias.
+
 ## v1.0.2 - 2026-11-17
 
 - Correccion del error en el precio mostrado por `mostrarInformacion()`.

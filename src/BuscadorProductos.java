@@ -1,3 +1,6 @@
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,6 +14,18 @@ public class BuscadorProductos {
 
     public void agregar(Producto producto) {
         productos.add(producto);
+    }
+
+    /**
+     * Registra los productos de un archivo CSV (codigo,nombre,precio,existencia).
+     * La primera linea es el encabezado.
+     */
+    public void cargarDesdeArchivo(Path archivo) throws IOException {
+        List<String> lineas = Files.readAllLines(archivo);
+        for (String linea : lineas.subList(1, lineas.size())) {
+            String[] c = linea.split(",");
+            agregar(new Producto(c[0], c[1], Double.parseDouble(c[2]), Integer.parseInt(c[3])));
+        }
     }
 
     /** Busca un producto por su codigo exacto. Regresa null si no existe. */
@@ -34,12 +49,13 @@ public class BuscadorProductos {
         return resultados;
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         BuscadorProductos buscador = new BuscadorProductos();
-        buscador.agregar(new Producto("P001", "Teclado mecanico", 899.50, 25));
-        buscador.agregar(new Producto("P002", "Mouse inalambrico", 349.00, 40));
-        buscador.agregar(new Producto("P003", "Teclado inalambrico", 599.00, 12));
+        // v1.1.0: el catalogo inicial se registra desde datos/productos.csv
+        buscador.cargarDesdeArchivo(Path.of("datos", "productos.csv"));
+        System.out.println("Productos registrados: " + buscador.productos.size());
 
+        System.out.println();
         System.out.println("Buscar por codigo P002:");
         Producto encontrado = buscador.buscarPorCodigo("P002");
         if (encontrado != null) {
